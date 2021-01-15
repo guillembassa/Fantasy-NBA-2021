@@ -1,0 +1,118 @@
+---
+title: "NBA FANTASY 2020"
+author: "Guillem Bassa"
+date: "3/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+library(rvest)
+library(RSelenium)
+library(tidyverse)
+library(janitor)
+
+```
+
+
+
+```{r}
+pagina <- "https://fantasydata.com/nba/fantasy-basketball-leaders?scope=2&season=2021&seasontype=1&conference=1&date=01-03-2021"
+
+browser <- rsDriver(browser = "firefox", port = 4545L, verbose = FALSE)
+remDr <- browser[["client"]]
+
+remDr$navigate(pagina)
+
+#click on more
+
+
+
+
+
+
+
+
+cont <- 0
+while (cont < 7){
+  remDr$findElements("link", "LOAD MORE")[[1]]$clickElement()
+  cont <- cont+1
+  Sys.sleep(7)
+}
+
+
+#Download the page
+page_html <- remDr$getPageSource()[[1]]
+
+```
+
+
+```{r}
+table_html <- read_html(page_html) %>% #trobar la taula
+  html_nodes("table") %>% 
+  html_table(fill=T)
+
+
+table_html_header <- as.data.frame(table_html[[7]]) 
+table_html_players <- as.data.frame(table_html[[8]])
+table_html_stats <- as.data.frame(table_html[[9]])
+
+number_players <- c(1:as.numeric(count(table_html_players)))
+colnames(table_html_stats) <- colnames(table_html_header)
+
+table_html_stats <- table_html_stats %>% 
+  mutate(id = number_players)
+
+table_html_players <-table_html_players %>% 
+  rename(id = X1) %>% 
+  separate(X2, into = c("players", "error"), sep = "  ")
+  
+table_html_players <- table_html_players[,-3]
+
+table_final <- left_join(table_html_players, table_html_stats)
+
+
+```
+Put the fantasy Punctuation
+
+```{r}
+table_final <- table_final %>% 
+  mutate(Shots_Made =`3PM` + `2PM`,
+         Total_shots = round((100*Shots_Made)/`FG%`),
+         Shots_Made = ifelse(Shots_Made == "-inf", 0, Shots_Made),
+         Shots_Missed = Total_shots - Shots_Made,
+         FTMissed = round(FTM*(100-`FT%`)/`FT%`),
+         FTMissed = ifelse(is.nan(FTMissed),0,FTMissed)
+         )
+    
+
+table_final <- table_final %>% 
+  mutate(SCORE = PTS -Shots_Missed - FTMissed + REB + AST +STL +BLK - TO ,
+         day = Sys.Date())
+
+```
+
+
+Save the day, and then add it to the master list of all days
+
+```{r}
+save_name <- as.character(paste0("C:/Users/Guillem/Documents/GitHub/Fantasy-NBA-2021//",as.character(Sys.Date()),"_Data.csv"))
+
+write.csv(table_final,save_name, row.names = FALSE)
+
+master <- read.csv("Master_Data.csv")
+master <- rbind(master, table_final)
+
+ 
+write.csv(master,"C:/Users/Guillem/Documents/GitHub/Fantasy-NBA-2021//Master_Data.csv", row.names = FALSE)
+
+```
+
+
+
+
+
+

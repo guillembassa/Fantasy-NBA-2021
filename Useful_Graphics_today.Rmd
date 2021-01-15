@@ -1,0 +1,259 @@
+---
+title: "Graphics upt to date"
+author: "Guillem Bassa"
+date: "7/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+```{r}
+library(tidyverse)
+library(rvest)
+library(RSelenium)
+```
+
+READ THE DATA
+
+```{r}
+read_master <- as.character(paste0("C:/Users/Guillem/Documents/GitHub/Fantasy-NBA-2021//",as.character(Sys.Date()-1),"_Master.csv"))
+
+data <- read.csv(read_master)
+data <- data %>% select(-(GP.RANK:X....RANK))
+```
+
+
+CREATE DATA FROM ALL PLAYERS ONLY LAST WEEK
+
+
+```{r}
+data7 <- data %>% 
+  filter(day == as.character(Sys.Date()-8)|
+           day == as.character(Sys.Date()-7)|
+           day == as.character(Sys.Date()-6)|
+           day == as.character(Sys.Date()-5)|
+           day == as.character(Sys.Date()-4)|
+           day == as.character(Sys.Date()-3)|
+           day == as.character(Sys.Date()-2)|
+           day == as.character(Sys.Date()-1)
+           )
+
+
+```
+
+Get players I can get
+
+
+
+```{r}
+pagina_espn <-"https://fantasy.espn.com/basketball/players/add?leagueId=93039502" 
+
+
+browser <- rsDriver(browser = "firefox", port = 4545L, verbose = FALSE)
+remDr <- browser[["client"]]
+
+remDr$navigate(pagina_espn)
+
+Sys.sleep(20)
+
+remDr$findElement(using = 'id', "onetrust-accept-btn-handler")$clickElement()
+
+Sys.sleep(5)
+
+
+page_espn_html <- remDr$getPageSource()[[1]]
+table_espn_html <- read_html(page_espn_html) %>% #trobar la taula
+  html_nodes("table") %>% 
+  html_table(fill=T)
+
+
+table_espn <- as.data.frame(table_espn_html[[1]])
+table_espn_2 <- as.data.frame(table_espn[1])
+
+#Remove the teams
+
+table_espn_2 <- table_espn_2 %>% 
+  mutate(Players = gsub("GS.*","", Players),
+         Players = gsub("Por.*","", Players),
+         Players = gsub("Mil.*","", Players),
+         Players = gsub("Min.*","", Players),
+         Players = gsub("Sac.*","", Players),
+         Players = gsub("LAL.*","", Players),
+         Players = gsub("LAC.*","", Players),
+         Players = gsub("Oln.*","", Players),
+         Players = gsub("Dal.*","", Players),
+         Players = gsub("Atl.*","", Players),
+         Players = gsub("Cha.*","", Players),
+         Players = gsub("Bkn.*","", Players),
+         Players = gsub("ONY.*","", Players),
+         Players = gsub("Den.*","", Players),
+         Players = gsub("Orl.*","", Players),
+         Players = gsub("Wsh.*","", Players),
+         Players = gsub("Cle.*","", Players),
+         Players = gsub("Mia.*","", Players),
+         Players = gsub("OKC.*","", Players),
+         Players = gsub("SA.*","", Players),
+         Players = gsub("Bos.*","", Players),
+         Players = gsub("Utah.*","", Players),
+         Players = gsub("Phi.*","", Players),
+         Players = gsub("Phx.*","", Players),
+         Players = gsub("Ind.*","", Players),
+         Players = gsub("Mem.*","", Players),
+         Players = gsub("Det.*","", Players),
+         Players = gsub("DTD.*","", Players)
+         )
+
+#Remove O  (Out)
+
+table_espn_2 <- table_espn_2 %>% 
+  mutate(Players = gsub("O$.*","", Players))
+
+```
+
+
+GET THE 10 PLAYERS THAT I CAN GET WITH MOST POINTS YESTERDAY
+
+```{r}
+name_list <- c(table_espn_2)
+
+data7_can_get <- subset(data7, PLAYER %in% name_list[["Players"]])
+
+data_today_can_get <- data7_can_get %>% 
+  filter(day == as.character((Sys.Date()-1)))
+
+data_today_top10_can_get <- data_today_can_get %>% 
+  top_n(6,score)
+
+mean_players <- data %>% 
+  group_by(PLAYER) %>% 
+  summarise(avg_season = mean(score))
+
+data7_mean <- data7 %>% 
+  group_by(PLAYER) %>% 
+  summarise(avg_7 = mean(score))
+
+data2 <- left_join(data, mean_players)
+data2 <- left_join(data2, data7_mean)
+```
+
+
+```{r}
+ggplot(subset(data2, PLAYER %in% data_today_top10_can_get$PLAYER), aes(as.Date(day),score, group = PLAYER, color = PLAYER))+
+  geom_line()+
+  stat_smooth(method = "lm")+
+  ggtitle("Evolution of the 6 players avalaible with most points yesterday")+
+  theme(legend.position = "none")+
+  geom_hline(aes(yintercept = avg_season), linetype = "dashed")+
+  geom_text(aes(label=score),hjust=0, vjust=0, size = 2.5, colour = "black")+
+  geom_text(aes((Sys.Date()-2),avg_season, label = round(avg_season,1)), size = 3, vjust = 1)+
+  geom_hline(aes(yintercept= avg_7), linetype = "dashed", color = "cyan")+
+  facet_wrap(~PLAYER)
+
+
+  
+```
+
+```{r}
+data7_can_get_grouped <-data7_can_get %>% 
+  group_by(PLAYER) %>% 
+  summarise(avg_7 = mean(score))
+
+top_data7 <-data7_can_get_grouped %>% 
+  top_n(6,avg_7)
+
+
+```
+
+EVOLUTION OF THE 6 PLAYERS AVALIABLE WITH BETTER 7 DAY AVG
+
+```{r}
+
+ggplot(subset(data2, PLAYER %in% top_data7$PLAYER), aes(as.Date(day),score, group = PLAYER, color = PLAYER))+
+  geom_line()+
+  stat_smooth(method = "lm")+
+  ggtitle("Evolution of the 6 players avalaible with better week average")+
+  theme(legend.position = "none")+
+  geom_hline(aes(yintercept = avg_season), linetype = "dashed")+
+  geom_text(aes(label=score),hjust=0, vjust=0, size = 2.5, colour = "black")+
+  geom_text(aes((Sys.Date()-2),avg_season, label = round(avg_season,1)), size = 3, vjust = 1)+
+  geom_hline(aes(yintercept= avg_7), linetype = "dashed", color = "cyan")+
+  facet_wrap(~PLAYER)
+
+
+
+```
+
+
+
+View the players with most points at the moment (Total)
+
+
+```{r}
+
+total_points <- data %>% 
+  group_by(PLAYER) %>% 
+  summarise(t_points = sum(score),
+            average_points = t_points / n())
+
+
+ggplot(subset(total_points, average_points >20), aes(average_points, t_points, colour = "red", label=PLAYER))+
+  geom_point()+
+  geom_text(aes(label=PLAYER),hjust=0, vjust=0, size = 2, colour = "black")+
+  theme(legend.position = "none")
+
+
+```
+
+
+
+```{r}
+name_Player <- "Royce O\'Neale"
+
+ ggplot(subset(data, PLAYER == name_Player), aes(as.Date(day),score, group = PLAYER, color = PLAYER))+
+  geom_line()+
+  stat_smooth(method = "lm")+
+  geom_hline(aes(yintercept = mean(score)), linetype = "dashed")+
+  geom_text(aes(label=score),hjust=0, vjust=0, size = 4, colour = "black")+
+  geom_text(aes((Sys.Date()-2),mean(score), label = round(mean(score),1)), size = 3, vjust = 1)+
+  geom_hline(data = subset(data7,PLAYER == name_Player ), aes(yintercept=mean(score)), linetype = "dashed", color = "cyan")
+
+
+```
+
+
+```{r}
+b
+```
+
+###
+```{r eval=FALSE, include=FALSE}
+
+
+ggplot(Add_players, aes(as.Date(day),score, group = PLAYER, color = PLAYER))+
+  geom_line()+
+  stat_smooth(method = "lm")+
+  geom_hline(aes(yintercept = mean(score)), linetype = "dashed")+
+  geom_text(aes(label=score),hjust=0, vjust=0, size = 4, colour = "black")+
+  geom_text(aes((Sys.Date()-2),mean(score), label = round(mean(score),1)), size = 3, vjust = 1)+
+  geom_hline(data =data7, aes(yintercept=mean(score)), linetype = "dashed", color = "cyan")+
+  facet_wrap(~PLAYER)+
+   theme(legend.position = "none")
+
+```
+###
+
+GGPREDICT
+```{r}
+
+
+
+
+```
+
+
+
