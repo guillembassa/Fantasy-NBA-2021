@@ -21,7 +21,7 @@ library(janitor)
 Open the page with the filter of exact day
 
 ```{r}
-pagina <-"https://www.nba.com/stats/players/traditional/?sort=PLUS_MINUS&dir=-1&Season=2020-21&SeasonType=Regular%20Season&DateFrom=01%2F06%2F2021&DateTo=01%2F06%2F2021"
+pagina <-"https://www.nba.com/stats/players/traditional/?sort=PLUS_MINUS&dir=-1&Season=2020-21&SeasonType=Regular%20Season&DateFrom=01%2F13%2F2021&DateTo=01%2F13%2F2021"
   
   
   #mostra   "https://www.nba.com/stats/players/traditional/?sort=PTS&dir=-1&Season=2020-21&SeasonType=Regular%20Season&LastNGames=1"
@@ -31,7 +31,7 @@ Posar la data
 
 
 ```{r}
-match_day <- "2021-01-06"
+match_day <- "2021-01-13"
   
   
 #Format: "2021-01-05"

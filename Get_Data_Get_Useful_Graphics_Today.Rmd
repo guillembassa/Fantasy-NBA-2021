@@ -1,37 +1,134 @@
 ---
-title: "Graphics upt to date"
+title: "NBA_FINAL"
 author: "Guillem Bassa"
-date: "7/1/2021"
+date: "18/1/2021"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-	echo = FALSE,
-	message = FALSE,
-	warning = FALSE
-)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 ```
+
 ```{r}
 library(tidyverse)
 library(rvest)
 library(RSelenium)
-```
 
-READ THE DATA
+```
+View how many days we have downloades, to not repeat the process for all days
+Note that the directory is from my machine, so you should change it to your directory (the one that you're saving the Rmarkdown file) for it to work.
 
 ```{r}
-read_master <- as.character(paste0("C:/Users/Guillem/Documents/GitHub/Fantasy-NBA-2021//",as.character(Sys.Date()-1),"_Master.csv"))
+date_inic <- as.Date("2020-12-22") #first NBA game of the season
+date_fin <- Sys.Date()
+date_cont <- date_inic
+days_no <- c()
 
-data <- read.csv(read_master)
+while (date_fin != date_cont) {
+  read_master <- as.character(paste0("C:/Users/Guillem/Documents/GitHub/Fantasy-NBA-2021//",as.character(date_cont),"_Master.csv"))
+  
+  if (!file.exists(read_master)) {
+    days_no <- append(days_no, date_cont)
+  }
+  
+  date_cont <- date_cont+1
+ 
+}
+#The 24 of December no match was played, so we remove it form the list
+days_no <- days_no[-1]
+
+```
+Start the browser, note I've done that with Mozilla firefox
+
+```{r}
+
+browser <- rsDriver(browser = "firefox", port = 4545L, verbose = FALSE)
+remDr <- browser[["client"]]
+
+```
+
+
+
+Modify the link to get data of specified day
+
+```{r}
+cont <- 1
+
+for (day in days_no) {
+  
+  insert_day <- format((days_no[cont]), format = "%d")
+  insert_month <-format((days_no[cont]), format = "%m")
+  insert_year <- format((days_no[cont]), format = "%y")
+  
+  
+  #Navigate
+  pagina <- as.character(paste0("https://www.nba.com/stats/players/traditional/?sort=PTS&dir=-1&Season=2020-21&SeasonType=Regular%20Season&DateFrom=",insert_month,"%2F",insert_day,"%2F20", insert_year, "&DateTo=",insert_month,"%2F",insert_day,"%2F20", insert_year)) 
+  remDr$navigate(pagina)
+  
+  Sys.sleep(25)
+
+  if (cont == 1) {
+    remDr$findElement(using = 'id', "onetrust-accept-btn-handler")$clickElement()
+    Sys.sleep(15)
+  }
+
+
+remDr$findElement(using = 'xpath', "//*/option[@value = 'string:All']")$clickElement()
+
+#get and modify the table
+
+page_html <- remDr$getPageSource()[[1]]
+table_html <- read_html(page_html) %>% #trobar la taula
+  html_nodes("table") %>% 
+  html_table(fill=T)
+
+
+table_html_stats <- as.data.frame(table_html[[1]])
+
+table_html_stats <- table_html_stats %>%
+  rename(pos = 1) %>% 
+  mutate(`3PTMissed` = `3PA` - `3PM`,
+         `FG_Missed`= FGA - FGM,
+         FTMissed = FTA - FTM)
+
+table_html_stats <- table_html_stats %>% 
+  select(-pos) %>% 
+  mutate(score = PTS -FG_Missed - FTMissed + REB + AST +STL +BLK - TOV -PF + (W*2),
+         day = as.factor(days_no[cont]))
+save_name <- as.character(paste0("C:/Users/Guillem/Documents/GitHub/Fantasy-NBA-2021//",as.character(days_no[cont]),"_Data.csv"))
+
+write.csv(table_html_stats,save_name, row.names = FALSE)
+
+
+read_master <- as.character(paste0("C:/Users/Guillem/Documents/GitHub/Fantasy-NBA-2021//",as.character(as.Date(days_no[cont])-1),"_Master.csv"))
+
+master <- read.csv(read_master)
+
+colnames(table_html_stats) <- colnames(master) 
+
+master <- rbind(master, table_html_stats)
+
+master_save <- as.character(paste0("C:/Users/Guillem/Documents/GitHub/Fantasy-NBA-2021//",as.character(as.Date(days_no[cont])),"_Master.csv"))
+master_save
+  
+write.csv(master,master_save, row.names = FALSE)
+  
+cont <- cont+1
+ 
+}
+
+
+
+```
+
+
+## Graphics
+
+Get to the ESPN page (previously you have to login)
+
+```{r}
+data <- read.csv(master_save)
 data <- data %>% select(-(GP.RANK:X....RANK))
-```
-
-
-CREATE DATA FROM ALL PLAYERS ONLY LAST WEEK
-
-
-```{r}
 data7 <- data %>% 
   filter(day == as.character(Sys.Date()-8)|
            day == as.character(Sys.Date()-7)|
@@ -44,18 +141,8 @@ data7 <- data %>%
            )
 
 
-```
 
-Get players I can get
-
-
-
-```{r}
-pagina_espn <-"https://fantasy.espn.com/basketball/players/add?leagueId=93039502" 
-
-
-browser <- rsDriver(browser = "firefox", port = 4545L, verbose = FALSE)
-remDr <- browser[["client"]]
+pagina_espn <-"https://fantasy.espn.com/basketball/players/add?leagueId=93039502"
 
 remDr$navigate(pagina_espn)
 
@@ -64,8 +151,11 @@ Sys.sleep(20)
 remDr$findElement(using = 'id', "onetrust-accept-btn-handler")$clickElement()
 
 Sys.sleep(5)
+```
 
+Download the page with players I can get
 
+```{r}
 page_espn_html <- remDr$getPageSource()[[1]]
 table_espn_html <- read_html(page_espn_html) %>% #trobar la taula
   html_nodes("table") %>% 
@@ -113,8 +203,8 @@ table_espn_2 <- table_espn_2 %>%
 table_espn_2 <- table_espn_2 %>% 
   mutate(Players = gsub("O$.*","", Players))
 
-```
 
+```
 
 GET THE 10 PLAYERS THAT I CAN GET WITH MOST POINTS YESTERDAY
 
@@ -158,6 +248,7 @@ ggplot(subset(data2, PLAYER %in% data_today_top10_can_get$PLAYER), aes(as.Date(d
   
 ```
 
+
 ```{r}
 data7_can_get_grouped <-data7_can_get %>% 
   group_by(PLAYER) %>% 
@@ -188,68 +279,6 @@ ggplot(subset(data2, PLAYER %in% top_data7$PLAYER), aes(as.Date(day),score, grou
 
 ```
 
-
-
-View the players with most points at the moment (Total)
-
-
-```{r}
-
-total_points <- data %>% 
-  group_by(PLAYER) %>% 
-  summarise(t_points = sum(score),
-            average_points = t_points / n())
-
-
-ggplot(subset(total_points, average_points >20), aes(average_points, t_points, colour = "red", label=PLAYER))+
-  geom_point()+
-  geom_text(aes(label=PLAYER),hjust=0, vjust=0, size = 2, colour = "black")+
-  theme(legend.position = "none")
-
-
-```
-
-
-
-```{r}
-name_Player <- "Tim Hardaway Jr."
-
- ggplot(subset(data, PLAYER == name_Player), aes(as.Date(day),score, group = PLAYER, color = PLAYER))+
-  geom_line()+
-  stat_smooth(method = "lm")+
-  geom_hline(aes(yintercept = mean(score)), linetype = "dashed")+
-  geom_text(aes(label=score),hjust=0, vjust=0, size = 4, colour = "black")+
-  geom_text(aes((Sys.Date()-2),mean(score), label = round(mean(score),1)), size = 3, vjust = 1)+
-  geom_hline(data = subset(data7,PLAYER == name_Player ), aes(yintercept=mean(score)), linetype = "dashed", color = "cyan")
-
-
-```
-
-
-###
-```{r eval=FALSE, include=FALSE}
-
-
-ggplot(Add_players, aes(as.Date(day),score, group = PLAYER, color = PLAYER))+
-  geom_line()+
-  stat_smooth(method = "lm")+
-  geom_hline(aes(yintercept = mean(score)), linetype = "dashed")+
-  geom_text(aes(label=score),hjust=0, vjust=0, size = 4, colour = "black")+
-  geom_text(aes((Sys.Date()-2),mean(score), label = round(mean(score),1)), size = 3, vjust = 1)+
-  geom_hline(data =data7, aes(yintercept=mean(score)), linetype = "dashed", color = "cyan")+
-  facet_wrap(~PLAYER)+
-   theme(legend.position = "none")
-
-```
-###
-
-GGPREDICT
-```{r}
-
-
-
-
-```
 
 
 
